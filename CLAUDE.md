@@ -1,74 +1,82 @@
 # CLAUDE.md
 
-Factory Inventory Management System Demo with GitHub integration - Full-stack application with Vue 3 frontend, Python FastAPI backend, and in-memory mock data (no database).
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Critical Tool Usage Rules
+## Project Overview
 
-### Subagents
-Use the Task tool with these specialized subagents for appropriate tasks:
+Factory Inventory Management System — a full-stack demo app (Claude Code workshop) for inventory tracking, order management, demand forecasting, and spending analytics. Uses in-memory JSON data (no database); changes don't persist across server restarts.
 
-- **vue-expert**: Use for Vue 3 frontend features, UI components, styling, and client-side functionality
-  - Examples: Creating components, fixing reactivity issues, performance optimization, complex state management
-  - **MANDATORY RULE: ANY time you need to create or significantly modify a .vue file, you MUST delegate to vue-expert**
-- **code-reviewer**: Use after writing significant code to review quality and best practices
-- **Explore**: Use for understanding codebase structure, searching for patterns, or answering questions about how components work
-- **general-purpose**: Use for complex multi-step tasks or when other agents don't fit
+## Commands
 
-### Skills
-- **backend-api-test** skill: Use when writing or modifying tests in `tests/backend` directory with pytest and FastAPI TestClient
-
-### MCP Tools
-- **ALWAYS use GitHub MCP tools** (`mcp__github__*`) for ALL GitHub operations
-  - Exception: Local branches only - use `git checkout -b` instead of `mcp__github__create_branch`
-- **ALWAYS use Playwright MCP tools** (`mcp__playwright__*`) for browser testing
-  - Test against: `http://localhost:3000` (frontend), `http://localhost:8001` (API)
-
-## Stack
-- **Frontend**: Vue 3 + Composition API + Vite (port 3000)
-- **Backend**: Python FastAPI (port 8001)
-- **Data**: JSON files in `server/data/` loaded via `server/mock_data.py`
-
-## Quick Start
-
+### Start/Stop Servers
 ```bash
-# Backend
-cd server
-uv run python main.py
+./scripts/start.sh          # Starts both backend (8001) and frontend (3000)
+./scripts/stop.sh            # Stops both servers
 
-# Frontend
-cd client
-npm install && npm run dev
+# Manual (separate terminals):
+cd server && uv run python main.py    # Backend at http://localhost:8001
+cd client && npm run dev              # Frontend at http://localhost:3000
 ```
 
-## Key Patterns
+### Tests
+```bash
+cd tests
+uv run pytest -v                                    # All tests (55 tests, ~0.13s)
+uv run pytest backend/test_inventory.py -v          # Single file
+uv run pytest backend/test_inventory.py::TestInventoryEndpoints::test_get_all_inventory  # Single test
+uv run pytest --cov=../server --cov-report=html     # With coverage
+```
 
-**Filter System**: 4 filters (Time Period, Warehouse, Category, Order Status) apply to all data via query params
-**Data Flow**: Vue filters → `client/src/api.js` → FastAPI → In-memory filtering → Pydantic validation → Computed properties
-**Reactivity**: Raw data in refs (`allOrders`, `inventoryItems`), derived data in computed properties
+### Build
+```bash
+cd client && npm run build    # Production build → client/dist/
+```
+
+### Install Dependencies
+```bash
+cd server && uv venv && uv sync    # Python (uses uv package manager)
+cd client && npm install            # Node
+```
+
+## Architecture
+
+```
+client/   → Vue 3 + Vite (Composition API, Vue Router, Axios)
+server/   → Python FastAPI (Pydantic models, Uvicorn, in-memory JSON data)
+tests/    → pytest with FastAPI TestClient
+scripts/  → Shell scripts for start/stop automation
+```
+
+### Frontend → Backend Communication
+- Frontend calls `client/src/api.js` methods which use Axios to hit `http://localhost:8001/api/*`
+- All filter endpoints accept query params: `warehouse`, `category`, `status`, `month`
+- Filter value `'all'` means "no filter" (skip that parameter)
+- Category matching is case-insensitive on the backend
+
+### Key Backend Patterns
+- All data loaded from `server/data/*.json` at startup into memory via `mock_data.py`
+- `apply_filters()` and `filter_by_month()` in `main.py` handle shared filtering logic
+- Pydantic models define response types; FastAPI auto-generates docs at `/docs`
+
+### Key Frontend Patterns
+- Views in `client/src/views/` are page-level components (Dashboard, Inventory, Orders, Spending, Demand, Reports)
+- Shared state via composables in `client/src/composables/` (useAuth, useFilters, useI18n)
+- i18n supports English and Japanese (`client/src/locales/`)
+- Currency formatting helpers in `client/src/utils/currency.js`
+
+## Sub-Project Guidance
+
+See `client/CLAUDE.md` for Vue 3 patterns and `server/CLAUDE.md` for FastAPI patterns. The `tests/README.md` documents test structure and conventions.
 
 ## API Endpoints
-- `GET /api/inventory` - Filters: warehouse, category
-- `GET /api/orders` - Filters: warehouse, category, status, month
-- `GET /api/dashboard/summary` - All filters
-- `GET /api/demand`, `/api/backlog` - No filters
-- `GET /api/spending/*` - Summary, monthly, categories, transactions
 
-## Common Issues
-1. Use unique keys in v-for (not `index`) - use `sku`, `month`, etc.
-2. Validate dates before `.getMonth()` calls
-3. Update Pydantic models when changing JSON data structure
-4. Inventory filters don't support month (no time dimension)
-5. Revenue goals: $800K/month single, $9.6M YTD all months
+Interactive docs available at http://localhost:8001/docs when server is running.
 
-## File Locations
-- Views: `client/src/views/*.vue`
-- API Client: `client/src/api.js`
-- Backend: `server/main.py`, `server/mock_data.py`
-- Data: `server/data/*.json`
-- Styles: `client/src/App.vue`
+Key endpoints: `/api/inventory`, `/api/orders`, `/api/dashboard/summary`, `/api/demand`, `/api/backlog`, `/api/spending/*`, `/api/reports/*`, `/api/purchase-orders`
 
-## Design System
-- Colors: Slate/gray (#0f172a, #64748b, #e2e8f0)
-- Status: green/blue/yellow/red
-- Charts: Custom SVG, CSS Grid for layouts
-- No emojis in UI
+## Testing Conventions
+
+- Test files live in `tests/backend/` and follow `test_*.py` naming
+- `conftest.py` provides a `client` fixture (FastAPI TestClient)
+- Tests validate: status codes, response structure, filter behavior, calculation accuracy, 404 handling
+- All tests use in-memory data — no external dependencies needed
